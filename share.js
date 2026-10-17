@@ -157,6 +157,8 @@
         delete out.codecId;
       }
       if (pair) out.rttMs = Math.round((pair.currentRoundTripTime || 0) * 1000);
+      out.showing = TVShare.active;
+      out.video = { w: video.videoWidth, h: video.videoHeight, paused: video.paused, readyState: video.readyState };
       sendMsg(out);
       if (opts.debug) badge.textContent = (out.codec || '') + ' ' + out.width + 'x' + out.height + ' ' + out.fps + 'fps jb ' + out.jitterBufferMs + 'ms';
     }).catch(function () {});
