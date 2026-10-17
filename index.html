@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="referrer" content="no-referrer">
+<meta name="referrer" content="origin">
 <title>TV Dashboard</title>
 <style>
   :root {
@@ -29,9 +29,8 @@
   /* Crypto column */
   #crypto { display: grid; grid-template-rows: repeat(3, 1fr); gap: 12px; }
   .coin { padding: 0; }
-  /* TradingView widget is rendered at 75% size, then scaled up, so its text is larger. */
-  .tv-zoom { position: absolute; left: 0; top: 0; width: 133.333%; height: 133.333%; transform: scale(.75); transform-origin: 0 0; }
-  .tv-zoom { width: 100%; height: 100%; transform: none; }
+  /* TradingView widget is rendered in a 75% box, then scaled up 1.33x, so its text is larger. */
+  .tv-zoom { position: absolute; left: 0; top: 0; width: 75%; height: 75%; transform: scale(1.3333); transform-origin: 0 0; }
   .tradingview-widget-container, .tradingview-widget-container__widget { width: 100%; height: 100%; }
   .tradingview-widget-copyright { display: none; }
 
