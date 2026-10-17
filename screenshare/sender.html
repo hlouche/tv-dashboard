@@ -61,8 +61,8 @@
       </label>
       <label>Max resolution
         <select id="res">
-          <option value="1080" selected>1080p</option>
-          <option value="720">720p</option>
+          <option value="720" selected>720p (lowest latency)</option>
+          <option value="1080">1080p (sharper text)</option>
         </select>
       </label>
       <label>Codec
@@ -145,7 +145,7 @@
         f.failures = (f.failures || 0) + 1;
         if (f.failures >= 2 && (m.codec || $('codec').value) === 'video/H264') f.codec = 'video/VP8';
         console.log('[share] TV ' + f.addr + ' could not decode (' + m.codec + '), retry #' + f.failures + ' with ' + (f.codec || $('codec').value));
-        setTimeout(function () { offer(m.from); }, 300);
+        setTimeout(function () { offer(m.from); }, 1000); // give the TV's decoder a moment to free up
       }
     } else if (m.type === 'stats') {
       var s = receivers.get(m.from);
