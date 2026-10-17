@@ -103,7 +103,7 @@
     detail:   { fps: 30, hint: 'detail', degradation: 'maintain-resolution' }
   };
 
-  var ws = null, stream = null, sharing = false;
+  var ws = null, stream = null, sharing = false, starting = false;
   var receivers = new Map(); // id -> { addr, pc, stats, el }
 
   // ---- signaling ----
@@ -160,6 +160,8 @@
 
   // ---- sharing ----
   function startShare() {
+    if (starting || sharing) return; // ignore double clicks while Chrome's picker is open
+    starting = true;
     var p = PRESETS[$('preset').value];
     var wantAudio = $('audio').checked;
     if (TEST) { $('testclock').style.display = 'block'; tickClock(); }
@@ -172,6 +174,7 @@
       surfaceSwitching: 'include',
       monitorTypeSurfaces: 'include'
     }).then(function (s) {
+      starting = false;
       stream = s;
       var vt = s.getVideoTracks()[0];
       vt.contentHint = p.hint;
@@ -183,6 +186,7 @@
       receivers.forEach(function (_, id) { offer(id); });
       render();
     }).catch(function (e) {
+      starting = false;
       $('testclock').style.display = 'none';
       if (e.name !== 'NotAllowedError') alert('Could not start sharing: ' + e.message);
     });
