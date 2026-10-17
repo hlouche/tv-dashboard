@@ -179,6 +179,13 @@ function log(s) {
   console.log(new Date().toLocaleTimeString('en-GB'), s);
 }
 
+server.on('error', (err) => {
+  if (err.code !== 'EADDRINUSE') throw err;
+  console.error(`Port ${PORT} is already in use, so the screen share server is probably already running.`);
+  console.error(`Open http://localhost:${PORT}/ to share, or stop the other copy first (lsof -i :${PORT}).`);
+  process.exit(1);
+});
+
 server.listen(PORT, '0.0.0.0', () => {
   const ip = lanIps[0] || '<mac-ip>';
   console.log(`Screen share server on port ${PORT}`);
