@@ -1,6 +1,6 @@
 // TV dashboard backend: returns calendar events (today + 7 days) and Chelsea's next fixture as JSON.
 // Fixtures: ESPN public API (site.web host; site.api.espn.com blocks Google's servers), TheSportsDB as fallback.
-// Optional Script Properties: CALENDAR_IDS (comma-separated, default "primary").
+// Optional Script Property CALENDAR_IDS: comma-separated calendar IDs (default: all calendars in the account).
 
 var TZ = 'Europe/Amsterdam';
 var CHELSEA_ESPN_ID = '363';
@@ -17,15 +17,21 @@ function doGet() {
 
 function getEvents_() {
   var props = PropertiesService.getScriptProperties();
-  var ids = (props.getProperty('CALENDAR_IDS') || 'primary').split(',');
+  var prop = props.getProperty('CALENDAR_IDS');
+  var cals = prop ? prop.split(',').map(function (id) {
+    id = id.trim();
+    return id === 'primary' ? CalendarApp.getDefaultCalendar() : CalendarApp.getCalendarById(id);
+  }) : CalendarApp.getAllCalendars();
   var start = new Date();
   start.setHours(0, 0, 0, 0);
   var end = new Date(start.getTime() + 8 * 24 * 3600 * 1000);
-  var events = [];
-  ids.forEach(function (id) {
-    var cal = id.trim() === 'primary' ? CalendarApp.getDefaultCalendar() : CalendarApp.getCalendarById(id.trim());
+  var events = [], seen = {};
+  cals.forEach(function (cal) {
     if (!cal) return;
     cal.getEvents(start, end).forEach(function (ev) {
+      var key = ev.getTitle() + '|' + ev.getStartTime().getTime(); // overlapping imported timetables
+      if (seen[key]) return;
+      seen[key] = true;
       events.push({
         title: ev.getTitle() || '(no title)',
         start: ev.getStartTime().toISOString(),
