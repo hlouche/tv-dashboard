@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>TV Dashboard</title>
+<style>
+  :root {
+    --bg: #0b0e14;
+    --card: #141925;
+    --line: #232a3a;
+    --text: #e8ecf4;
+    --muted: #8a93a6;
+    --accent: #4f8cff;
+    --chelsea: #2a5bd7;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+
+  /* Everything is laid out on a 960x540 canvas and scaled to fit the real viewport. */
+  #stage { position: absolute; left: 0; top: 0; width: 960px; height: 540px; transform-origin: 0 0;
+    display: grid; grid-template-columns: 330px 1fr 1fr; grid-template-rows: 1fr; gap: 12px; padding: 14px; }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; position: relative; }
+  .label { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+
+  /* Crypto column */
+  #crypto { display: grid; grid-template-rows: repeat(3, 1fr); gap: 12px; }
+  .coin { padding: 0; }
+  /* TradingView widget is rendered at 75% size, then scaled up, so its text is larger. */
+  .tv-zoom { position: absolute; left: 0; top: 0; width: 133.333%; height: 133.333%; transform: scale(.75); transform-origin: 0 0; }
+  .tv-zoom { width: 100%; height: 100%; transform: none; }
+  .tradingview-widget-container, .tradingview-widget-container__widget { width: 100%; height: 100%; }
+  .tradingview-widget-copyright { display: none; }
+
+  /* Middle column: clock + Chelsea */
+  #mid { display: grid; grid-template-rows: auto 1fr; gap: 12px; }
+  #clock { padding: 14px 18px 16px; }
+  #time { font-size: 78px; font-weight: 700; line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  #time .sec { font-size: 30px; color: var(--muted); font-weight: 500; margin-left: 4px; }
+  #date { font-size: 20px; color: var(--muted); margin-top: 8px; }
+
+  #chelsea { padding: 14px 18px; display: flex; flex-direction: column; border-left: 4px solid var(--chelsea); }
+  #fx-comp { font-size: 14px; color: var(--muted); margin-top: 6px; }
+  #fx-opp { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  #fx-opp img { width: 44px; height: 44px; object-fit: contain; }
+  #fx-name { font-size: 28px; font-weight: 700; line-height: 1.1; }
+  #fx-ha { display: inline-block; font-size: 13px; font-weight: 700; padding: 3px 8px; border-radius: 6px; margin-top: 10px; background: var(--chelsea); width: max-content; }
+  #fx-ha.away { background: #3a4256; }
+  #fx-when { font-size: 20px; margin-top: 10px; }
+  #fx-count { font-size: 34px; font-weight: 700; margin-top: auto; font-variant-numeric: tabular-nums; color: #9fc0ff; }
+
+  /* Calendar */
+  #cal { padding: 14px 16px; display: flex; flex-direction: column; }
+  #cal-list { margin-top: 8px; overflow: hidden; flex: 1; }
+  .day { font-size: 14px; font-weight: 700; color: var(--accent); margin: 10px 0 4px; text-transform: uppercase; letter-spacing: .06em; }
+  .day:first-child { margin-top: 2px; }
+  .ev { display: flex; gap: 10px; font-size: 17px; line-height: 1.3; padding: 2px 0; }
+  .ev .t { color: var(--muted); min-width: 52px; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .ev .n { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .empty { color: var(--muted); font-size: 16px; }
+
+  #status { position: absolute; right: 22px; bottom: 18px; font-size: 10px; color: #4b5366; }
+  #setup { display: none; position: absolute; inset: 0; background: var(--bg); z-index: 9; padding: 40px; font-size: 18px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <section id="crypto">
+    <div class="card coin" data-symbol="CRYPTO:XMRUSD"></div>
+    <div class="card coin" data-symbol="CRYPTO:SOLUSD"></div>
+    <div class="card coin" data-symbol="CRYPTO:ETHUSD"></div>
+  </section>
+
+  <section id="mid">
+    <div class="card" id="clock">
+      <div id="time">--:--</div>
+      <div id="date"></div>
+    </div>
+    <div class="card" id="chelsea">
+      <div class="label">Chelsea · next match</div>
+      <div id="fx-comp"></div>
+      <div id="fx-opp"><img id="fx-logo" alt="" hidden><div id="fx-name">Loading…</div></div>
+      <div id="fx-ha" hidden></div>
+      <div id="fx-when"></div>
+      <div id="fx-count"></div>
+    </div>
+  </section>
+
+  <section class="card" id="cal">
+    <div class="label">Calendar · next 7 days</div>
+    <div id="cal-list"><div class="empty">Loading…</div></div>
+  </section>
+</div>
+<div id="status"></div>
+<div id="setup">Add your Apps Script web-app URL to the address:<br><code>?api=https://script.google.com/macros/s/…/exec</code></div>
+
+<script>
+(function () {
+  var TZ = 'Europe/Amsterdam';
+  var API = new URLSearchParams(location.search).get('api');
+  var DATA_REFRESH_MS = 10 * 60 * 1000;      // calendar + fixture every 10 min
+  var PAGE_RELOAD_MS = 3 * 60 * 60 * 1000;   // full reload every 3 h
+  var fixture = null;
+
+  // ---- scale the 960x540 stage to the viewport ----
+  function fit() {
+    var s = Math.min(window.innerWidth / 960, window.innerHeight / 540);
+    var st = document.getElementById('stage');
+    st.style.transform = 'scale(' + s + ')';
+    st.style.left = ((window.innerWidth - 960 * s) / 2) + 'px';
+    st.style.top = ((window.innerHeight - 540 * s) / 2) + 'px';
+  }
+  window.addEventListener('resize', fit);
+  fit();
+
+  // ---- TradingView mini symbol overview widgets ----
+  document.querySelectorAll('.coin').forEach(function (el) {
+    var wrap = document.createElement('div');
+    wrap.className = 'tv-zoom';
+    wrap.innerHTML = '<div class="tradingview-widget-container"><div class="tradingview-widget-container__widget"></div></div>';
+    var s = document.createElement('script');
+    s.src = 'https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js';
+    s.async = true;
+    s.text = JSON.stringify({
+      symbol: el.getAttribute('data-symbol'), width: '100%', height: '100%', locale: 'en',
+      dateRange: '1D', colorTheme: 'dark', isTransparent: true, autosize: true, largeChartUrl: '',
+      chartOnly: false, noTimeScale: true
+    });
+    wrap.firstChild.appendChild(s);
+    el.appendChild(wrap);
+  });
+
+  // ---- clock ----
+  var fmtTime = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  var fmtDate = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  var fmtHM = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false });
+  var fmtDayKey = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+  var fmtDayName = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'short' });
+  var fmtKick = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
+
+  function tick() {
+    var now = new Date();
+    var p = fmtTime.format(now).split(':');
+    document.getElementById('time').innerHTML = p[0] + ':' + p[1] + '<span class="sec">' + p[2] + '</span>';
+    document.getElementById('date').textContent = fmtDate.format(now);
+    renderCountdown(now);
+  }
+
+  function renderCountdown(now) {
+    var el = document.getElementById('fx-count');
+    if (!fixture) { el.textContent = ''; return; }
+    var ms = new Date(fixture.kickoff) - now;
+    if (ms <= 0) { el.textContent = ms > -2 * 3600 * 1000 ? 'Live now' : ''; return; }
+    var d = Math.floor(ms / 864e5), h = Math.floor(ms / 36e5) % 24, m = Math.floor(ms / 6e4) % 60, s = Math.floor(ms / 1e3) % 60;
+    el.textContent = (d ? d + 'd ' : '') + pad(h) + 'h ' + pad(m) + 'm ' + pad(s) + 's';
+  }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+  // ---- data from Apps Script ----
+  function renderCalendar(events) {
+    var list = document.getElementById('cal-list');
+    if (!events || !events.length) { list.innerHTML = '<div class="empty">Nothing planned</div>'; return; }
+    var today = fmtDayKey.format(new Date());
+    var tomorrow = fmtDayKey.format(new Date(Date.now() + 864e5));
+    var html = '', lastKey = '';
+    events.forEach(function (ev) {
+      var start = new Date(ev.start);
+      var key = ev.allDay ? ev.start.slice(0, 10) : fmtDayKey.format(start);
+      if (ev.allDay && key < today) key = today; // multi-day all-day event that started earlier
+      if (key !== lastKey) {
+        var name = key === today ? 'Today' : key === tomorrow ? 'Tomorrow' : fmtDayName.format(new Date(key + 'T12:00:00Z'));
+        html += '<div class="day">' + name + '</div>';
+        lastKey = key;
+      }
+      html += '<div class="ev"><span class="t">' + (ev.allDay ? 'all day' : fmtHM.format(start)) + '</span><span class="n">' + esc(ev.title) + '</span></div>';
+    });
+    list.innerHTML = html;
+  }
+
+  function renderFixture(fx) {
+    fixture = fx;
+    if (!fx) { document.getElementById('fx-name').textContent = 'No upcoming match'; return; }
+    document.getElementById('fx-comp').textContent = fx.competition;
+    document.getElementById('fx-name').textContent = (fx.home ? 'vs ' : '@ ') + fx.opponent;
+    var logo = document.getElementById('fx-logo');
+    if (fx.opponentLogo) { logo.src = fx.opponentLogo; logo.hidden = false; } else { logo.hidden = true; }
+    var ha = document.getElementById('fx-ha');
+    ha.hidden = false;
+    ha.textContent = fx.home ? 'HOME' : 'AWAY';
+    ha.className = fx.home ? '' : 'away';
+    document.getElementById('fx-when').textContent = fmtKick.format(new Date(fx.kickoff)) + (fx.venue ? ' · ' + fx.venue : '');
+    renderCountdown(new Date());
+  }
+
+  function load() {
+    if (!API) { document.getElementById('setup').style.display = 'block'; return; }
+    fetch(API, { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.events) renderCalendar(d.events);
+        if ('fixture' in d) renderFixture(d.fixture);
+        document.getElementById('status').textContent = 'updated ' + fmtHM.format(new Date()) +
+          (d.eventsError || d.fixtureError ? ' · ' + (d.eventsError || d.fixtureError) : '');
+      })
+      .catch(function (e) { document.getElementById('status').textContent = 'update failed ' + fmtHM.format(new Date()) + ': ' + e; });
+  }
+
+  tick();
+  setInterval(tick, 1000);
+  load();
+  setInterval(load, DATA_REFRESH_MS);
+  setTimeout(function () { location.reload(); }, PAGE_RELOAD_MS);
+})();
+</script>
+</body>
+</html>
