@@ -12,7 +12,7 @@
   var opts, ws, pc, overlay, video, audio, badge;
   var pendingCandidates = [];
   var retryMs = 1000;
-  var statsTimer = null, dropTimer = null;
+  var statsTimer = null, dropTimer = null, watchdog = null;
   var lastBytes = 0, lastStatsAt = 0;
 
   var TVShare = { active: false, init: init };
@@ -28,22 +28,28 @@
   function buildOverlay() {
     overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;background:#000;z-index:1000;display:none;';
+    audio = document.createElement('audio');
+    audio.autoplay = true;
+    badge = document.createElement('div');
+    badge.style.cssText = 'position:absolute;right:12px;bottom:10px;font:12px sans-serif;color:#666;';
+    overlay.appendChild(audio);
+    overlay.appendChild(badge);
+    document.body.appendChild(overlay);
+    newVideo();
+  }
+
+  // A new <video> per session, so nothing from the previous session keeps the TV's decoder busy.
+  function newVideo() {
+    if (video) video.remove();
     video = document.createElement('video');
     video.muted = true; // video carries no audio; muted keeps autoplay allowed everywhere
     video.autoplay = true;
     video.playsInline = true;
     video.disablePictureInPicture = true;
     video.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
-    audio = document.createElement('audio');
-    audio.autoplay = true;
-    badge = document.createElement('div');
-    badge.style.cssText = 'position:absolute;right:12px;bottom:10px;font:12px sans-serif;color:#666;';
-    overlay.appendChild(video);
-    overlay.appendChild(audio);
-    overlay.appendChild(badge);
-    document.body.appendChild(overlay);
     // The first decoded frame is the signal to switch the dashboard over.
     video.addEventListener('playing', function () { setActive(true); });
+    overlay.insertBefore(video, overlay.firstChild);
   }
 
   function connect() {
@@ -118,6 +124,27 @@
     };
     lastBytes = 0;
     statsTimer = setInterval(reportStats, 2000);
+    watchdog = setInterval(checkDecoding.bind(null, p, Date.now()), 1000);
+  }
+
+  // This TV's hardware H.264 decoder is sometimes still held by the previous session, and then
+  // frames arrive but none decode. Ask the sender for a fresh connection (it switches codec after
+  // repeated failures).
+  function checkDecoding(p, startedAt) {
+    if (p !== pc) return;
+    p.getStats().then(function (report) {
+      if (p !== pc) return;
+      report.forEach(function (s) {
+        if (s.type !== 'inbound-rtp' || s.kind !== 'video') return;
+        if (s.framesDecoded > 0) { clearInterval(watchdog); return; }
+        if (s.bytesReceived > 50000 && Date.now() - startedAt > 2500) {
+          console.warn('[share] no frames decoded, asking for a new session');
+          clearInterval(watchdog);
+          sendMsg({ type: 'retry', reason: 'no-decode', codec: s.codecId && report.get(s.codecId) && report.get(s.codecId).mimeType });
+          closePeer();
+        }
+      });
+    }).catch(function () {});
   }
 
   function lowLatency(receiver) {
@@ -166,14 +193,18 @@
 
   function closePeer() {
     clearInterval(statsTimer);
+    clearInterval(watchdog);
     clearTimeout(dropTimer);
+    [video && video.srcObject, audio.srcObject].forEach(function (ms) {
+      if (ms) ms.getTracks().forEach(function (t) { t.stop(); });
+    });
     if (pc) { var p = pc; pc = null; p.close(); }
+    if (video) { video.srcObject = null; newVideo(); }
+    audio.srcObject = null;
   }
 
   function stop() {
     closePeer();
-    video.srcObject = null;
-    audio.srcObject = null;
     setActive(false);
   }
 

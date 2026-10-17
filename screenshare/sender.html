@@ -137,9 +137,19 @@
     } else if (m.type === 'candidate') {
       var c = receivers.get(m.from);
       if (c && c.pc) c.pc.addIceCandidate(m.candidate).catch(function () {});
+    } else if (m.type === 'retry') {
+      // The TV got packets but decoded nothing (its hardware decoder can stay busy after a previous
+      // session). Reconnect; after two H.264 failures, fall back to VP8 for this TV.
+      var f = receivers.get(m.from);
+      if (f && sharing) {
+        f.failures = (f.failures || 0) + 1;
+        if (f.failures >= 2 && (m.codec || $('codec').value) === 'video/H264') f.codec = 'video/VP8';
+        console.log('[share] TV ' + f.addr + ' could not decode (' + m.codec + '), retry #' + f.failures + ' with ' + (f.codec || $('codec').value));
+        setTimeout(function () { offer(m.from); }, 300);
+      }
     } else if (m.type === 'stats') {
       var s = receivers.get(m.from);
-      if (s) { s.stats = m; renderStats(s); }
+      if (s) { s.stats = m; if (m.fps > 0) s.failures = 0; renderStats(s); }
     } else if (m.type === 'replaced') {
       stopShare('replaced by another sender tab');
       render('Another sender tab took over.');
@@ -182,6 +192,7 @@
       $('preview').srcObject = new MediaStream([vt]);
       $('preview').style.display = 'block';
       sharing = true;
+      receivers.forEach(function (r) { r.codec = null; r.failures = 0; });
       send({ type: 'state', sharing: true });
       receivers.forEach(function (_, id) { offer(id); });
       render();
@@ -221,7 +232,7 @@
       streams: [new MediaStream([vt])],
       sendEncodings: [{ maxBitrate: +$('bitrate').value * 1000, maxFramerate: p.fps, priority: 'high', networkPriority: 'high' }]
     });
-    preferCodec(vtx, $('codec').value);
+    preferCodec(vtx, r.codec || $('codec').value);
     // Audio goes in its own stream: tracks in one stream are lip-synced, which would add the audio
     // jitter buffer to the video's delay.
     stream.getAudioTracks().forEach(function (at) {
@@ -299,7 +310,10 @@
       receivers.forEach(function (r) { if (r.pc) applyParams(r.pc); });
     });
   });
-  $('codec').addEventListener('change', function () { if (sharing) receivers.forEach(function (_, id) { offer(id); }); });
+  $('codec').addEventListener('change', function () {
+    receivers.forEach(function (r) { r.codec = null; r.failures = 0; });
+    if (sharing) receivers.forEach(function (_, id) { offer(id); });
+  });
   $('toggle').addEventListener('click', function () { sharing ? stopShare('button') : startShare(); });
 
   // ---- stats ----
@@ -334,7 +348,7 @@
     var est = r.pc && l.encodeMs != null && t.rttMs != null && t.jitterBufferMs != null && t.decodeMs != null
       ? Math.round(l.encodeMs + t.rttMs / 2 + t.jitterBufferMs + t.decodeMs) : null;
     r.el.innerHTML =
-      '<h2>TV · ' + r.addr + ' · ' + state + '</h2><table>' +
+      '<h2>TV · ' + r.addr + ' · ' + state + (r.codec ? ' · fallback ' + r.codec.slice(6) : '') + '</h2><table>' +
       row('Pipeline latency (est.)', fmt(est, ' ms')) +
       row('Sent', fmt(l.size) + ' @ ' + fmt(l.fps, ' fps')) +
       row('Bitrate (target)', fmt(l.kbps, ' kbps') + ' (' + fmt(l.target, ' kbps') + ')') +

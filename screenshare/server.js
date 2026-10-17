@@ -140,7 +140,7 @@ function onReceiver(ws, req) {
   ws.on('message', (data) => {
     let m;
     try { m = JSON.parse(data); } catch { return; }
-    if (m.type === 'answer' || m.type === 'candidate' || m.type === 'stats') json(sender, { ...m, from: id });
+    if (['answer', 'candidate', 'stats', 'retry'].includes(m.type)) json(sender, { ...m, from: id });
   });
   ws.on('close', () => {
     receivers.delete(id);
