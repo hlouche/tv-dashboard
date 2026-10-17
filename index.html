@@ -96,10 +96,12 @@
 <div id="status"></div>
 <div id="setup">Add your Apps Script web-app URL to the address:<br><code>?api=https://script.google.com/macros/s/…/exec</code></div>
 
+<script src="share.js"></script>
 <script>
 (function () {
   var TZ = 'Europe/Amsterdam';
-  var API = new URLSearchParams(location.search).get('api');
+  var params = new URLSearchParams(location.search);
+  var API = params.get('api');
   var DATA_REFRESH_MS = 10 * 60 * 1000;      // calendar + fixture every 10 min
   var PAGE_RELOAD_MS = 3 * 60 * 60 * 1000;   // full reload every 3 h
   var fixture = null;
@@ -212,7 +214,25 @@
   setInterval(tick, 1000);
   load();
   setInterval(load, DATA_REFRESH_MS);
-  setTimeout(function () { location.reload(); }, PAGE_RELOAD_MS);
+  // Never reload in the middle of a screen share; retry once it has ended.
+  setTimeout(function reloadWhenIdle() {
+    if (window.TVShare && TVShare.active) return setTimeout(reloadWhenIdle, 60 * 1000);
+    location.reload();
+  }, PAGE_RELOAD_MS);
+
+  // ---- screen share (?share=<mac-ip>:8090&key=...) ----
+  // Hide the dashboard while a share is on screen so the TV's GPU only has to draw the video.
+  if (params.get('share') && window.TVShare) {
+    TVShare.init({
+      host: params.get('share'),
+      key: params.get('key'),
+      bufferMs: +(params.get('sharebuffer') || 0),
+      onChange: function (active) {
+        document.getElementById('stage').style.visibility = active ? 'hidden' : 'visible';
+        if (!active) load();
+      }
+    });
+  }
 })();
 </script>
 </body>

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Share receiver test</title>
+<style>
+  body { margin: 0; background: #0b0e14; color: #8a93a6; font: 18px -apple-system, Roboto, sans-serif; display: grid; place-items: center; height: 100vh; }
+</style>
+</head>
+<body>
+<div id="idle">Waiting for a share… (receiver test page)</div>
+<script src="/share.js"></script>
+<script>
+  // Same receiver code the dashboard uses: /receiver.html?key=<token>&debug
+  var q = new URLSearchParams(location.search);
+  TVShare.init({ host: location.host, key: q.get('key'), debug: q.has('debug'),
+    bufferMs: +(q.get('buffer') || 0) });
+</script>
+</body>
+</html>

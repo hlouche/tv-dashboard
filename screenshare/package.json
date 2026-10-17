@@ -1,0 +1,9 @@
+{
+  "name": "tv-screenshare",
+  "private": true,
+  "type": "module",
+  "description": "LAN WebRTC screen share from a Mac to the TV dashboard",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=20" },
+  "dependencies": { "ws": "^8.18.0" }
+}
