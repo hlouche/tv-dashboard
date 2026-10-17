@@ -39,7 +39,8 @@
   <p class="sub">Peer-to-peer WebRTC over your Wi-Fi. Pick a screen, window or tab; stop here or with Chrome's "Stop sharing" bar.</p>
 
   <div class="card">
-    <div id="status"><span class="dot" id="dot"></span><span id="statusText">Connecting to server…</span></div>
+    <div id="status"><span class="dot" id="dot"></span><span id="statusText">Connecting to server…</span>
+      <button id="takeover" style="display:none;padding:6px 14px;margin-left:auto">Use this tab</button></div>
   </div>
 
   <div class="card">
@@ -104,6 +105,7 @@
   };
 
   var ws = null, stream = null, sharing = false, starting = false;
+  var replaced = false; // another sender tab took over; don't reconnect (that would kick it out again)
   var receivers = new Map(); // id -> { addr, pc, stats, el }
 
   // ---- signaling ----
@@ -114,6 +116,7 @@
       $('toggle').disabled = true;
       receivers.forEach(function (r) { if (r.pc) r.pc.close(); });
       receivers.clear();
+      if (replaced) return render();
       render('Server offline, retrying…');
       setTimeout(connect, 2000);
     };
@@ -151,8 +154,8 @@
       var s = receivers.get(m.from);
       if (s) { s.stats = m; if (m.fps > 0) s.failures = 0; renderStats(s); }
     } else if (m.type === 'replaced') {
+      replaced = true;
       stopShare('replaced by another sender tab');
-      render('Another sender tab took over.');
     }
     render();
   }
@@ -314,6 +317,11 @@
     receivers.forEach(function (r) { r.codec = null; r.failures = 0; });
     if (sharing) receivers.forEach(function (_, id) { offer(id); });
   });
+  $('takeover').addEventListener('click', function () {
+    replaced = false;
+    render('Connecting to server…');
+    connect();
+  });
   $('toggle').addEventListener('click', function () { sharing ? stopShare('button') : startShare(); });
 
   // ---- stats ----
@@ -364,8 +372,10 @@
   function row(k, v) { return '<tr><th>' + k + '</th><td>' + v + '</td></tr>'; }
 
   function render(msg) {
-    var online = ws && ws.readyState === 1;
+    var online = ws && ws.readyState === 1 && !replaced;
     $('dot').className = 'dot' + (online ? ' on' : '');
+    $('takeover').style.display = replaced ? '' : 'none';
+    if (replaced) { $('toggle').disabled = true; $('statusText').textContent = 'Sharing moved to another tab. Close this one, or take over here.'; return; }
     $('statusText').textContent = msg || (!online ? 'Connecting to server…' :
       (sharing ? 'Sharing' : 'Ready') + ' · ' + receivers.size + ' TV' + (receivers.size === 1 ? '' : 's') + ' connected');
     $('toggle').textContent = sharing ? 'Stop sharing' : 'Start sharing';

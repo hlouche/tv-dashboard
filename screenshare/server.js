@@ -100,7 +100,11 @@ function json(ws, msg) {
 }
 
 function onSender(ws) {
-  if (sender) { json(sender, { type: 'replaced' }); sender.close(); }
+  if (sender) {
+    log('sender replaced by a newer tab');
+    json(sender, { type: 'replaced' });
+    sender.close();
+  }
   sender = ws;
   sharing = false;
   log('sender connected');
