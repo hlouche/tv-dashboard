@@ -137,7 +137,7 @@
       report.forEach(function (s) {
         if (s.type !== 'inbound-rtp' || s.kind !== 'video') return;
         if (s.framesDecoded > 0) { clearInterval(watchdog); return; }
-        if (s.bytesReceived > 50000 && Date.now() - startedAt > 2500) {
+        if ((s.framesReceived > 0 || s.bytesReceived > 5000) && Date.now() - startedAt > 2500) {
           console.warn('[share] no frames decoded, asking for a new session');
           clearInterval(watchdog);
           sendMsg({ type: 'retry', reason: 'no-decode', codec: s.codecId && report.get(s.codecId) && report.get(s.codecId).mimeType });
